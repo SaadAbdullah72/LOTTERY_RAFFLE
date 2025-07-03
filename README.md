@@ -1,12 +1,11 @@
 
-
- Lottery Raffle Smart Contract
+ **LOTTERY_RAFFLE  (Smart Contract)**
 
 A fully decentralized, verifiable random lottery smart contract built with **Solidity**, powered by **Foundry** and **Chainlink VRF v2**.
 
 
 
- Overview
+ **Overview**
 
 This project is a blockchain-based lottery raffle system that:
 - Allows users to enter the lottery with ETH
