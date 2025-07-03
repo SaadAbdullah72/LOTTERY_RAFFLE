@@ -1,15 +1,12 @@
-Here’s a **professional, clean, and impressive `README.md`** for your **Blockchain Lottery Project** using **Foundry, Chainlink VRF, and Solidity**:
 
----
 
-````markdown
-# 🎰 Lottery Raffle Smart Contract
+ Lottery Raffle Smart Contract
 
 A fully decentralized, verifiable random lottery smart contract built with **Solidity**, powered by **Foundry** and **Chainlink VRF v2**.
 
----
 
-## 🚀 Overview
+
+ Overview
 
 This project is a blockchain-based lottery raffle system that:
 - Allows users to enter the lottery with ETH
@@ -19,7 +16,7 @@ This project is a blockchain-based lottery raffle system that:
 
 ---
 
-## 🛠 Tech Stack
+ Tech Stack
 
 - ⚙️ **Solidity** — Smart contract language
 - 🧪 **Foundry** — Development, testing, and deployment framework
