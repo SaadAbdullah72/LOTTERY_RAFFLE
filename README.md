@@ -50,6 +50,66 @@ This project is a blockchain-based lottery raffle system that:
 
 ---
 
+## 💻 VS Code Setup
+
+### Step 1 — Install Required Extensions
+
+Open VS Code and install these extensions:
+
+| Extension | Publisher | Purpose |
+|-----------|-----------|---------|
+| **Solidity** | Nomic Foundation (`NomicFoundation.hardhat-solidity`) | Syntax highlighting, IntelliSense, error checking |
+| **Even Better TOML** | tamasfe | Syntax highlighting for `foundry.toml` |
+
+> Install via the Extensions sidebar (`Ctrl+Shift+X`) or run in the terminal:
+> ```bash
+> code --install-extension NomicFoundation.hardhat-solidity
+> code --install-extension tamasfe.even-better-toml
+> ```
+
+### Step 2 — Open the Project
+
+```bash
+# Clone the repo (if you haven't already)
+git clone https://github.com/SaadAbdullah72/LOTTERY_RAFFLE.git
+cd LOTTERY_RAFFLE
+
+# Open in VS Code
+code .
+```
+
+### Step 3 — VS Code is Pre-Configured ✅
+
+A `.vscode/settings.json` file is already included in this repo. It automatically:
+- Points the Solidity extension to the correct `lib/` folder for dependencies
+- Sets up the correct **remappings** for `@chainlink` and `@solmate` imports
+- Enables **format on save** for `.sol` files
+- Uses **Solidity v0.8.19** for compilation
+
+### Step 4 — Install Foundry (for building/testing)
+
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+### Step 5 — Install Dependencies
+
+```bash
+forge install
+```
+
+### Step 6 — Build & Test from VS Code Terminal
+
+Open the integrated terminal (`Ctrl+\``) and run:
+
+```bash
+forge build   # Compile contracts
+forge test    # Run tests
+```
+
+---
+
 ## 🧪 Local Development
 
 ### ✅ Prerequisites
