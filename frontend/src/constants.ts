@@ -1,65 +1,435 @@
-export const contractAddress = "0xFD93f996dc17Ff5951dADfc76091faFa686398fE"; // User needs to update this after deploying
+export const contractAddress = "0x96Dc50A5F6ffE8504CE0F3b3B6C88a253c6E5228"; // User needs to update this after deploying
 export const abi = [
     {
-      "type": "constructor",
-      "inputs": [
-        { "name": "entranceFee", "type": "uint256", "internalType": "uint256" },
-        { "name": "interval", "type": "uint256", "internalType": "uint256" },
-        { "name": "vrfCoordinator", "type": "address", "internalType": "address" },
-        { "name": "gasLane", "type": "bytes32", "internalType": "bytes32" },
-        { "name": "callbackGasLimit", "type": "uint32", "internalType": "uint32" },
-        { "name": "subscriptionId", "type": "uint256", "internalType": "uint256" },
-        { "name": "raffleOwnerAddress", "type": "address", "internalType": "address" }
-      ],
-      "stateMutability": "nonpayable"
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "entranceFee",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "interval",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "vrfCoordinator",
+                "type": "address"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "gasLane",
+                "type": "bytes32"
+            },
+            {
+                "internalType": "uint32",
+                "name": "callbackGasLimit",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "subscriptionId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "raffleOwnerAddress",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
     },
     {
-      "type": "function",
-      "name": "enterRaffle",
-      "inputs": [],
-      "outputs": [],
-      "stateMutability": "payable"
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "have",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "want",
+                "type": "address"
+            }
+        ],
+        "name": "OnlyCoordinatorCanFulfill",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "getEntranceFee",
-      "inputs": [],
-      "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-      "stateMutability": "view"
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "have",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "coordinator",
+                "type": "address"
+            }
+        ],
+        "name": "OnlyOwnerOrCoordinator",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "getLastTimeStamp",
-      "inputs": [],
-      "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-      "stateMutability": "view"
+        "inputs": [],
+        "name": "Raffle__RaffleNotOpen",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "getPlayer",
-      "inputs": [{ "name": "indexOfPlayer", "type": "uint256", "internalType": "uint256" }],
-      "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
-      "stateMutability": "view"
+        "inputs": [],
+        "name": "Raffle__SendMoreToEnterRaffle",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "getRaffleState",
-      "inputs": [],
-      "outputs": [{ "name": "", "type": "uint8", "internalType": "enum Raffle.RaffleState" }],
-      "stateMutability": "view"
+        "inputs": [],
+        "name": "Raffle__TransferFailed",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "getRecentWinner",
-      "inputs": [],
-      "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
-      "stateMutability": "view"
+        "inputs": [],
+        "name": "Raffle__TransferFailedToOwner",
+        "type": "error"
     },
     {
-      "type": "function",
-      "name": "gets_players",
-      "inputs": [],
-      "outputs": [{ "name": "", "type": "address[]", "internalType": "address payable[]" }],
-      "stateMutability": "view"
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "balance",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "playersLength",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "raffleState",
+                "type": "uint256"
+            }
+        ],
+        "name": "Raffle__UpkeepNotNeeded",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAddress",
+        "type": "error"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "vrfCoordinator",
+                "type": "address"
+            }
+        ],
+        "name": "CoordinatorSet",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "from",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferRequested",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "from",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferred",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "player",
+                "type": "address"
+            }
+        ],
+        "name": "RaffleEntered",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "requestId",
+                "type": "uint256"
+            }
+        ],
+        "name": "RequestRaffleWinner",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "winner",
+                "type": "address"
+            }
+        ],
+        "name": "WinnerPicked",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
+        "name": "checkUpkeep",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "upkeepNeeded",
+                "type": "bool"
+            },
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "enterRaffle",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getEntranceFee",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getInterval",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getLastTimeStamp",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "indexOfPlayer",
+                "type": "uint256"
+            }
+        ],
+        "name": "getPlayer",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getRaffleState",
+        "outputs": [
+            {
+                "internalType": "enum Raffle.RaffleState",
+                "name": "",
+                "type": "uint8"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getRecentWinner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "gets_players",
+        "outputs": [
+            {
+                "internalType": "address payable[]",
+                "name": "",
+                "type": "address[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
+        "name": "performUpkeep",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "requestId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "randomWords",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "rawFulfillRandomWords",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "s_vrfCoordinator",
+        "outputs": [
+            {
+                "internalType": "contract IVRFCoordinatorV2Plus",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_vrfCoordinator",
+                "type": "address"
+            }
+        ],
+        "name": "setCoordinator",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ];

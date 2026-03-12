@@ -108,7 +108,7 @@ async function main() {
     const vrfCoordinator = "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B";
     const gasLane = "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae";
     const callbackGasLimit = 500000;
-    const subscriptionId = "57477411089376650331325719424898120969927413020599882309981248136647699979416";
+    const subscriptionId = "15993839906387054297531610053355364271225837432935631693595241318358973806335";
     const raffleOwnerAddress = wallet.address;
 
     const raffle = await factory.deploy(
@@ -134,6 +134,7 @@ async function main() {
     const constantsPath = path.join(__dirname, 'frontend', 'src', 'constants.ts');
     let constantsContent = fs.readFileSync(constantsPath, 'utf8');
     constantsContent = constantsContent.replace(/export const contractAddress = ".*";/, `export const contractAddress = "${address}";`);
+    constantsContent = constantsContent.replace(/export const abi = \[.*\];/s, `export const abi = ${JSON.stringify(abi, null, 4)};`);
     fs.writeFileSync(constantsPath, constantsContent);
     console.log("Updated frontend/src/constants.ts");
 }

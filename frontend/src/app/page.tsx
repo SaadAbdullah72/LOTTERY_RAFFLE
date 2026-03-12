@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ethers, BrowserProvider, Contract } from "ethers";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { 
@@ -12,7 +12,8 @@ import {
   Loader2, 
   ShieldCheck,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Clock
 } from "lucide-react";
 import { abi, contractAddress } from "../constants";
 
@@ -30,6 +31,8 @@ interface ContractState {
   recentWinner: string;
   raffleState: number; // 0: OPEN, 1: CALCULATING
   playersCount: number;
+  lastTimeStamp: number;
+  interval: number;
 }
 
 // --- Animation Variants ---
@@ -53,6 +56,61 @@ const itemVariants: Variants = {
   }
 };
 
+// --- Starfield Component (Realistic Lighting) ---
+const Starfield = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let stars: { x: number; y: number; size: number; speed: number; opacity: number }[] = [];
+
+    const init = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      stars = Array.from({ length: 150 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2,
+        speed: Math.random() * 0.5 + 0.1,
+        opacity: Math.random()
+      }));
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      stars.forEach(star => {
+        ctx.fillStyle = `rgba(168, 85, 247, ${star.opacity})`;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        star.y -= star.speed;
+        if (star.y < 0) {
+          star.y = canvas.height;
+          star.x = Math.random() * canvas.width;
+        }
+      });
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    window.addEventListener('resize', init);
+    init();
+    draw();
+
+    return () => {
+      window.removeEventListener('resize', init);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none opacity-40" />;
+};
+
 export default function Home() {
   const [address, setAddress] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -60,6 +118,7 @@ export default function Home() {
   const [message, setMessage] = useState<{ text: string; type: 'info' | 'error' | 'success' } | null>(null);
   const [contractData, setContractData] = useState<ContractState | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [timeLeft, setTimeLeft] = useState<number>(0);
 
   // Mouse move effect for background glow
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -68,24 +127,64 @@ export default function Home() {
 
   const updateUIInfo = useCallback(async (contractInstance: Contract) => {
     try {
-      const [fee, winner, state, players] = await Promise.all([
+      const [fee, winner, state, players, lastTS, interval] = await Promise.all([
         contractInstance.getEntranceFee(),
         contractInstance.getRecentWinner(),
         contractInstance.getRaffleState(),
-        contractInstance.gets_players()
+        contractInstance.gets_players(),
+        contractInstance.getLastTimeStamp(),
+        contractInstance.getInterval()
       ]);
 
       setContractData({
         entranceFee: ethers.formatEther(fee),
         recentWinner: winner === ethers.ZeroAddress ? "" : winner,
         raffleState: Number(state),
-        playersCount: players.length
+        playersCount: players.length,
+        lastTimeStamp: Number(lastTS),
+        interval: Number(interval)
       });
     } catch (err) {
       console.error("Error fetching contract info", err);
-      setMessage({ text: "Error fetching contract data.", type: 'error' });
+      // Fallback if getInterval fails on old contracts
+      try {
+           const [fee, winner, state, players, lastTS] = await Promise.all([
+            contractInstance.getEntranceFee(),
+            contractInstance.getRecentWinner(),
+            contractInstance.getRaffleState(),
+            contractInstance.gets_players(),
+            contractInstance.getLastTimeStamp()
+          ]);
+    
+          setContractData({
+            entranceFee: ethers.formatEther(fee),
+            recentWinner: winner === ethers.ZeroAddress ? "" : winner,
+            raffleState: Number(state),
+            playersCount: players.length,
+            lastTimeStamp: Number(lastTS),
+            interval: 30 // Fallback default
+          });
+      } catch (e) {
+          setMessage({ text: "Error fetching contract data.", type: 'error' });
+      }
     }
   }, []);
+
+  // Timer logic
+  useEffect(() => {
+    if (!contractData) return;
+
+    const tick = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const nextRaffle = contractData.lastTimeStamp + contractData.interval;
+      const remaining = Math.max(0, nextRaffle - now);
+      setTimeLeft(remaining);
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [contractData]);
 
   const connectWallet = useCallback(async () => {
     if (typeof window !== "undefined" && window.ethereum) {
@@ -141,6 +240,12 @@ export default function Home() {
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   return (
     <div 
       className="relative min-h-screen bg-background overflow-hidden selection:bg-accent/30 flex flex-col items-center"
@@ -150,7 +255,8 @@ export default function Home() {
         '--y': `${mousePos.y}px`
       } as React.CSSProperties}
     >
-      {/* Background Decor */}
+      {/* Visual Polish */}
+      <Starfield />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
       <div className="noise-overlay" />
       
@@ -228,7 +334,7 @@ export default function Home() {
                 className="w-full space-y-8"
               >
                 {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <StatCard 
                     label="Entrance Fee" 
                     value={`${contractData?.entranceFee || "0"} ETH`} 
@@ -240,9 +346,14 @@ export default function Home() {
                     icon={<Users className="w-5 h-5 text-accent" />} 
                   />
                   <StatCard 
-                    label="Contract Status" 
+                    label="Status" 
                     value={contractData?.raffleState === 0 ? "OPEN" : "CALCULATING"} 
                     icon={<Activity className={`w-5 h-5 ${contractData?.raffleState === 0 ? 'text-green-400' : 'text-yellow-400'}`} />} 
+                  />
+                  <StatCard 
+                    label="Next Raffle" 
+                    value={formatTime(timeLeft)} 
+                    icon={<Clock className="w-5 h-5 text-accent" />} 
                   />
                 </div>
 
@@ -252,6 +363,9 @@ export default function Home() {
                     <Trophy className="w-32 h-32" />
                   </div>
                   
+                  {/* Glowing Pulse behind button */}
+                  <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-accent/20 rounded-full blur-[100px] pointer-events-none" />
+
                   <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 text-xs font-mono text-white/40 uppercase tracking-widest">
