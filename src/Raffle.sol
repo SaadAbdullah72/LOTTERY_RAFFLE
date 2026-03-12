@@ -142,7 +142,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
             numWords: NUM_WORDS,
             extraArgs: VRFV2PlusClient._argsToBytes(
                 // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
-                VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                VRFV2PlusClient.ExtraArgsV1({nativePayment: true})
             )
         });
         uint256 requestId = s_vrfCoordinator.requestRandomWords(request);
@@ -167,12 +167,16 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit WinnerPicked(s_recentWinner);
 
         //Interaction (External Contract Interactions)
-        (bool successWinner,) = recentWinner.call{value: ((address(this).balance) * 90) / 100}("");
+        uint256 totalBalance = address(this).balance;
+        uint256 ownerShare = (totalBalance * 10) / 100;
+        uint256 winnerShare = totalBalance - ownerShare;
+
+        (bool successWinner,) = recentWinner.call{value: winnerShare}("");
         if (!successWinner) {
             revert Raffle__TransferFailed();
         }
 
-        (bool successOwner,) = i_raffleOwnerAddress.call{value: ((address(this).balance) * 95) / 100}("");
+        (bool successOwner,) = i_raffleOwnerAddress.call{value: ownerShare}("");
         if (!successOwner) {
             revert Raffle__TransferFailedToOwner();
         }
