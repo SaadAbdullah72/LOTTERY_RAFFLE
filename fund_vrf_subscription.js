@@ -12,7 +12,7 @@ const VRF_COORDINATOR_ABI = [
 ];
 
 async function main() {
-    console.log(`Funding subscription ${SUB_ID} with 0.05 Sepolia ETH...`);
+    console.log(`Funding subscription ${SUB_ID} with 0.02 Sepolia ETH...`);
     
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
     const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
@@ -21,7 +21,7 @@ async function main() {
     
     try {
         const tx = await vrfCoordinator.fundSubscriptionWithNative(SUB_ID, {
-            value: ethers.parseEther("0.05")
+            value: ethers.parseEther("0.02")
         });
         console.log("Transaction sent. Waiting for confirmation...");
         await tx.wait();

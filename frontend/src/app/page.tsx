@@ -13,9 +13,20 @@ import {
   ShieldCheck,
   Zap,
   ChevronRight,
-  Clock
+  Clock,
+  Settings,
+  PlusCircle,
+  RefreshCcw,
+  Sparkles,
+  ExternalLink,
+  Lock,
+  Coins
 } from "lucide-react";
 import { abi, contractAddress } from "../constants";
+
+// --- Configuration ---
+const VRF_COORDINATOR_ADDRESS = "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B";
+const SUB_ID = "15993839906387054297531610053355364271225837432935631693595241318358973806335";
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -33,6 +44,9 @@ interface ContractState {
   playersCount: number;
   lastTimeStamp: number;
   interval: number;
+  owner: string;
+  poolBalance: string;
+  players: string[];
 }
 
 // --- Animation Variants ---
@@ -42,21 +56,22 @@ const containerVariants: Variants = {
     opacity: 1,
     transition: {
       staggerChildren: 0.1,
-      delayChildren: 0.2
+      delayChildren: 0.1
     }
   }
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, scale: 0.95, y: 30 },
   visible: { 
     opacity: 1, 
+    scale: 1,
     y: 0,
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
+    transition: { type: 'spring', damping: 20, stiffness: 100 }
   }
 };
 
-// --- Starfield Component (Realistic Lighting) ---
+// --- Starfield Component (Premium Starry Background) ---
 const Starfield = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -67,24 +82,26 @@ const Starfield = () => {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let stars: { x: number; y: number; size: number; speed: number; opacity: number }[] = [];
+    let stars: { x: number; y: number; size: number; speed: number; opacity: number; color: string }[] = [];
 
     const init = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      stars = Array.from({ length: 150 }, () => ({
+      stars = Array.from({ length: 200 }, () => ({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        size: Math.random() * 2,
-        speed: Math.random() * 0.5 + 0.1,
-        opacity: Math.random()
+        size: Math.random() * 1.5,
+        speed: Math.random() * 0.3 + 0.05,
+        opacity: Math.random(),
+        color: Math.random() > 0.8 ? '#A855F7' : '#FFFFFF'
       }));
     };
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       stars.forEach(star => {
-        ctx.fillStyle = `rgba(168, 85, 247, ${star.opacity})`;
+        ctx.fillStyle = star.color;
+        ctx.globalAlpha = star.opacity;
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
@@ -94,6 +111,9 @@ const Starfield = () => {
           star.y = canvas.height;
           star.x = Math.random() * canvas.width;
         }
+        
+        // Twinkle
+        if (Math.random() > 0.98) star.opacity = Math.random();
       });
       animationFrameId = requestAnimationFrame(draw);
     };
@@ -108,7 +128,7 @@ const Starfield = () => {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none opacity-40" />;
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 };
 
 export default function Home() {
@@ -119,21 +139,26 @@ export default function Home() {
   const [contractData, setContractData] = useState<ContractState | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
-  // Mouse move effect for background glow
+  // Mouse move effect for background dynamic glow
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 
-  const updateUIInfo = useCallback(async (contractInstance: Contract) => {
+  const updateUIInfo = useCallback(async (contractInstance: Contract, signerAddress: string) => {
     try {
-      const [fee, winner, state, players, lastTS, interval] = await Promise.all([
+      const provider = contractInstance.runner?.provider;
+      const [fee, winner, state, players, lastTS, interval, owner, balance] = await Promise.all([
         contractInstance.getEntranceFee(),
         contractInstance.getRecentWinner(),
         contractInstance.getRaffleState(),
         contractInstance.gets_players(),
         contractInstance.getLastTimeStamp(),
-        contractInstance.getInterval()
+        contractInstance.getInterval(),
+        contractInstance.owner(),
+        provider ? provider.getBalance(contractAddress) : Promise.resolve(0n)
       ]);
 
       setContractData({
@@ -142,64 +167,70 @@ export default function Home() {
         raffleState: Number(state),
         playersCount: players.length,
         lastTimeStamp: Number(lastTS),
-        interval: Number(interval)
+        interval: Number(interval),
+        owner: owner,
+        poolBalance: ethers.formatEther(balance),
+        players: players.map((p: any) => String(p))
       });
+
+      setIsAdmin(owner.toLowerCase() === signerAddress.toLowerCase());
     } catch (err) {
       console.error("Error fetching contract info", err);
-      // Fallback if getInterval fails on old contracts
-      try {
-           const [fee, winner, state, players, lastTS] = await Promise.all([
-            contractInstance.getEntranceFee(),
-            contractInstance.getRecentWinner(),
-            contractInstance.getRaffleState(),
-            contractInstance.gets_players(),
-            contractInstance.getLastTimeStamp()
-          ]);
-    
-          setContractData({
-            entranceFee: ethers.formatEther(fee),
-            recentWinner: winner === ethers.ZeroAddress ? "" : winner,
-            raffleState: Number(state),
-            playersCount: players.length,
-            lastTimeStamp: Number(lastTS),
-            interval: 30 // Fallback default
-          });
-      } catch (e) {
-          setMessage({ text: "Error fetching contract data.", type: 'error' });
-      }
     }
   }, []);
 
   // Timer logic
   useEffect(() => {
     if (!contractData) return;
-
     const tick = () => {
       const now = Math.floor(Date.now() / 1000);
       const nextRaffle = contractData.lastTimeStamp + contractData.interval;
       const remaining = Math.max(0, nextRaffle - now);
       setTimeLeft(remaining);
     };
-
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [contractData]);
 
+  // Network Check & Smart Connect
   const connectWallet = useCallback(async () => {
     if (typeof window !== "undefined" && window.ethereum) {
       setLoading(true);
       try {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== '0xaa36a7') {
+          setMessage({ text: "Switching to Sepolia...", type: 'info' });
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0xaa36a7' }],
+            });
+          } catch (e: any) {
+            if (e.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0xaa36a7',
+                  chainName: 'Sepolia Testnet',
+                  nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+                  rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
+                  blockExplorerUrls: ['https://sepolia.etherscan.io'],
+                }],
+              });
+            }
+          }
+        }
+
         const _provider = new BrowserProvider(window.ethereum);
         const _signer = await _provider.getSigner();
         const _address = await _signer.getAddress();
         const _contract = new Contract(contractAddress, abi, _signer);
 
         setAddress(_address);
-        await updateUIInfo(_contract);
+        await updateUIInfo(_contract, _address);
       } catch (err) {
-        console.error("Connection failed", err);
-        setMessage({ text: "Wallet connection failed.", type: 'error' });
+        setMessage({ text: "Connection failed.", type: 'error' });
       } finally {
         setLoading(false);
       }
@@ -210,35 +241,99 @@ export default function Home() {
 
   useEffect(() => {
     connectWallet();
-  }, [connectWallet]);
+    const interval = setInterval(() => {
+        if (address) {
+            const _provider = new BrowserProvider(window.ethereum);
+            _provider.getSigner().then(s => {
+                const _contract = new Contract(contractAddress, abi, s);
+                updateUIInfo(_contract, address);
+            });
+        }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [address, connectWallet, updateUIInfo]);
 
+  // --- Contract Actions ---
+  
   const enterRaffle = async () => {
-    if (!window.ethereum || !address) return;
+    if (!address) return;
     setActionLoading(true);
-    setMessage({ text: "Confirming entry in wallet...", type: 'info' });
+    setMessage({ text: "Initiating entry...", type: 'info' });
     try {
       const _provider = new BrowserProvider(window.ethereum);
       const _signer = await _provider.getSigner();
       const _contract = new Contract(contractAddress, abi, _signer);
-
       const fee = await _contract.getEntranceFee();
       const tx = await _contract.enterRaffle({ value: fee });
-      setMessage({ text: "Transaction sent! Waiting for confirmation...", type: 'info' });
+      setMessage({ text: "Transaction sent to pool...", type: 'info' });
       await tx.wait();
-      setMessage({ text: "Successfully entered the raffle!", type: 'success' });
-      await updateUIInfo(_contract);
-    } catch (err: unknown) {
-      console.error("Entry error", err);
-      const errorMessage = err instanceof Error ? err.message : "Transaction failed.";
-      if (errorMessage.includes("RaffleNotOpen")) {
-        setMessage({ text: "Raffle is currently closed for calculations.", type: 'error' });
-      } else {
-        setMessage({ text: "Failed to enter raffle.", type: 'error' });
-      }
+      setMessage({ text: "You're in the pool! Best of luck.", type: 'success' });
+      await updateUIInfo(_contract, address);
+    } catch (err: any) {
+      setMessage({ text: err.message.includes("RaffleNotOpen") ? "Raffle is calculating..." : "Entry failed.", type: 'error' });
     } finally {
       setActionLoading(false);
     }
   };
+
+  const triggerWinner = async () => {
+    if (!isAdmin) return;
+    setActionLoading(true);
+    setMessage({ text: "Triggering winner selection (performUpkeep)...", type: 'info' });
+    try {
+      const _provider = new BrowserProvider(window.ethereum);
+      const _signer = await _provider.getSigner();
+      const _contract = new Contract(contractAddress, abi, _signer);
+      const tx = await _contract.performUpkeep("0x");
+      await tx.wait();
+      setMessage({ text: "Ritual Initiated. Chainlink is calculating...", type: 'success' });
+      await updateUIInfo(_contract, address);
+    } catch (err: any) {
+      setMessage({ text: "Trigger failed. Conditions might not be met.", type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const fundVRF = async () => {
+    if (!isAdmin) return;
+    setActionLoading(true);
+    const amount = prompt("Enter Sepolia ETH amount to fund (e.g. 0.1):", "0.1");
+    if (!amount) { setActionLoading(false); return; }
+    
+    setMessage({ text: "Funding VRF Subscription...", type: 'info' });
+    try {
+      const _provider = new BrowserProvider(window.ethereum);
+      const _signer = await _provider.getSigner();
+      const coordinator = new Contract(VRF_COORDINATOR_ADDRESS, ["function fundSubscriptionWithNative(uint256 subId) external payable"], _signer);
+      const tx = await coordinator.fundSubscriptionWithNative(SUB_ID, { value: ethers.parseEther(amount) });
+      await tx.wait();
+      setMessage({ text: `Successfully funded VRF with ${amount} ETH!`, type: 'success' });
+    } catch (err: any) {
+      setMessage({ text: "Funding failed.", type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const emergencyReset = async () => {
+    if (!isAdmin) return;
+    setActionLoading(true);
+    setMessage({ text: "Attempting emergency reset...", type: 'info' });
+    try {
+        const _provider = new BrowserProvider(window.ethereum);
+        const _signer = await _provider.getSigner();
+        const _contract = new Contract(contractAddress, abi, _signer);
+        const tx = await _contract.forceResetRaffle();
+        await tx.wait();
+        setMessage({ text: "Raffle state reset to OPEN.", type: 'success' });
+        await updateUIInfo(_contract, address);
+    } catch (err: any) {
+        setMessage({ text: "Reset failed. Only works if state is CALCULATING.", type: 'error' });
+    } finally {
+        setActionLoading(false);
+    }
+  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -248,207 +343,347 @@ export default function Home() {
 
   return (
     <div 
-      className="relative min-h-screen bg-background overflow-hidden selection:bg-accent/30 flex flex-col items-center"
+      className="relative min-h-screen bg-[#030014] text-white selection:bg-purple-500/30 overflow-x-hidden font-sans"
       onMouseMove={handleMouseMove}
-      style={{
-        '--x': `${mousePos.x}px`,
-        '--y': `${mousePos.y}px`
-      } as React.CSSProperties}
     >
-      {/* Visual Polish */}
       <Starfield />
-      <div className="absolute inset-0 bg-glow pointer-events-none" />
-      <div className="noise-overlay" />
       
-      {/* Nav */}
-      <nav className="relative z-50 w-full max-w-7xl px-8 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-2 group cursor-pointer">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.4)] group-hover:scale-110 transition-transform">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-2xl font-bold tracking-tighter iridescent-text">REFLECT</span>
-        </div>
+      {/* Background Decor */}
+      <div 
+        className="fixed inset-0 z-0 transition-opacity duration-300 pointer-events-none opacity-20"
+        style={{
+          background: `radial-gradient(circle 600px at ${mousePos.x}px ${mousePos.y}px, rgba(168, 85, 247, 0.15), transparent 80%)`
+        }}
+      />
+      <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-900/20 blur-[150px] rounded-full z-0 animate-pulse" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-900/10 blur-[150px] rounded-full z-0" />
 
-        <button
-          onClick={connectWallet}
-          disabled={loading}
-          className="glass-card px-6 py-2.5 rounded-full flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all text-sm font-medium border-white/10"
-        >
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-accent" />
-          ) : (
-            <Wallet className="w-4 h-4 text-accent" />
-          )}
-          {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect Wallet"}
-        </button>
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-[100] backdrop-blur-xl border-b border-white/5 bg-black/40">
+        <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 p-[1px]">
+              <div className="w-full h-full rounded-[11px] bg-[#030014] flex items-center justify-center">
+                <Zap className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+              </div>
+            </div>
+            <span className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-500">
+               REFLECT
+            </span>
+          </motion.div>
+
+          <div className="flex items-center gap-4">
+            {isAdmin && (
+                <button
+                    onClick={() => setShowAdmin(!showAdmin)}
+                    className={`p-2.5 rounded-xl border border-white/10 transition-all ${showAdmin ? 'bg-purple-500/20 text-purple-400' : 'bg-white/5 text-white/40 hover:text-white'}`}
+                >
+                    <Settings className="w-5 h-5" />
+                </button>
+            )}
+            <button
+              onClick={connectWallet}
+              className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center gap-3 text-sm font-semibold group"
+            >
+              <div className={`w-2 h-2 rounded-full ${address ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-yellow-500'}`} />
+              <span className="hidden sm:inline">
+                {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect Protocol"}
+              </span>
+              <Wallet className="w-4 h-4 text-purple-400 group-hover:rotate-12 transition-transform" />
+            </button>
+          </div>
+        </div>
       </nav>
 
-      {/* Main Content */}
-      <motion.main 
-        className="relative z-20 w-full max-w-4xl px-8 flex flex-col items-center pt-20 pb-32"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {/* Hero Section */}
-        <motion.div variants={itemVariants} className="text-center mb-16 space-y-6">
-          <h1 className="text-7xl md:text-8xl font-extrabold tracking-tighter leading-[0.9] text-white">
-            THE <br /> 
-            <span className="iridescent-text">REFLECT</span> <br />
-            LOTTERY
-          </h1>
-          <p className="text-lg text-white/40 max-w-xl mx-auto font-light leading-relaxed">
-            A minimalist, decentralized raffle protocol where fair play meets premium design. 
-            Powered by Chainlink VRF on Ethereum Sepolia.
-          </p>
-        </motion.div>
-
-        {/* Action Center */}
-        <motion.div variants={itemVariants} className="w-full flex flex-col items-center">
-          <AnimatePresence mode="wait">
-            {!address ? (
-              <motion.div 
-                key="unconnected"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="glass-card p-12 rounded-[2rem] text-center max-w-md w-full"
-              >
-                <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <ShieldCheck className="w-8 h-8 text-accent" />
+      <main className="relative z-10 pt-32 pb-20 px-8 max-w-7xl mx-auto">
+        <motion.div 
+          className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {/* Dashboard Left: Main Entry Card (8 columns) */}
+          <motion.div variants={itemVariants} className="lg:col-span-8 space-y-8">
+            
+            {/* Hero Card */}
+            <div className="relative p-12 rounded-[2.5rem] bg-gradient-to-br from-white/10 to-transparent border border-white/10 backdrop-blur-3xl overflow-hidden group">
+              <div className="absolute top-0 right-0 p-12 opacity-[0.05] group-hover:scale-110 transition-transform duration-700">
+                <Trophy className="w-48 h-48" />
+              </div>
+              
+              <div className="relative z-10 space-y-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold tracking-widest uppercase text-purple-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  Live Pool Active
                 </div>
-                <h3 className="text-2xl font-semibold mb-4 text-white">Secure Access</h3>
-                <p className="text-white/40 mb-8 text-sm">Please authenticate your wallet to access the decentralized raffle pool.</p>
-                <button 
-                  onClick={connectWallet}
-                  className="w-full py-4 bg-accent hover:bg-accent/90 text-white font-bold rounded-2xl shadow-[0_10px_30px_rgba(168,85,247,0.3)] transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2"
-                >
-                  Authenticate Wallet <ArrowRight className="w-5 h-5" />
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="connected"
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full space-y-8"
-              >
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard 
-                    label="Entrance Fee" 
-                    value={`${contractData?.entranceFee || "0"} ETH`} 
-                    icon={<Zap className="w-5 h-5 text-accent" />} 
-                  />
-                  <StatCard 
-                    label="Active Players" 
-                    value={String(contractData?.playersCount || 0)} 
-                    icon={<Users className="w-5 h-5 text-accent" />} 
-                  />
-                  <StatCard 
-                    label="Status" 
-                    value={contractData?.raffleState === 0 ? "OPEN" : "CALCULATING"} 
-                    icon={<Activity className={`w-5 h-5 ${contractData?.raffleState === 0 ? 'text-green-400' : 'text-yellow-400'}`} />} 
-                  />
-                  <StatCard 
-                    label="Next Raffle" 
-                    value={formatTime(timeLeft)} 
-                    icon={<Clock className="w-5 h-5 text-accent" />} 
-                  />
+                
+                <h1 className="text-6xl md:text-7xl font-black tracking-tight leading-none">
+                  DECENTRALIZED <br />
+                  <span className="text-purple-500">RAFFLE.</span>
+                </h1>
+                
+                <p className="text-white/40 max-w-lg text-lg font-light leading-relaxed">
+                  The protocol is primed. {contractData?.playersCount || 0} participants have already committed. 
+                  Join the transparent raffle pool powered by Chainlink VRF.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6 pt-4">
+                  <button
+                    onClick={enterRaffle}
+                    disabled={actionLoading || contractData?.raffleState !== 0}
+                    className={`relative w-full sm:w-auto h-20 px-12 rounded-2xl bg-white text-black font-black text-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_20px_50px_rgba(255,255,255,0.15)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed cursor-pointer group
+                        ${actionLoading || contractData?.raffleState !== 0 ? '' : 'hover:shadow-[0_20px_60px_rgba(168,85,247,0.4)]'}
+                    `}
+                  >
+                    {actionLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
+                      <>ENTER RAFFLE <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" /></>
+                    )}
+                  </button>
+
+                  <div className="flex items-center gap-3 text-white/30 text-sm font-medium">
+                    <ShieldCheck className="w-5 h-5" />
+                    Audited Contract
+                  </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Main Action Card */}
-                <div className="glass-card p-10 rounded-[2.5rem] relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
-                    <Trophy className="w-32 h-32" />
-                  </div>
-                  
-                  {/* Glowing Pulse behind button */}
-                  <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-accent/20 rounded-full blur-[100px] pointer-events-none" />
-
-                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-xs font-mono text-white/40 uppercase tracking-widest">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Pool Active
-                      </div>
-                      <h2 className="text-4xl font-bold text-white tracking-tight">Ready to Win?</h2>
-                      <p className="text-white/40 max-w-xs text-sm font-light">
-                        Join the current pool for a chance to win the majority share of the accumulated ETH.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={enterRaffle}
-                      disabled={actionLoading || contractData?.raffleState !== 0}
-                      className={`min-w-[200px] h-20 rounded-3xl font-bold text-lg flex items-center justify-center gap-3 transition-all transform hover:-translate-y-1 active:scale-95 shadow-xl
-                        ${actionLoading || contractData?.raffleState !== 0 
-                          ? 'bg-white/5 text-white/20 cursor-not-allowed border-white/5' 
-                          : 'bg-white text-black hover:bg-white/90 shadow-[0_20px_50px_rgba(255,255,255,0.2)]'
-                        }`}
-                    >
-                      {actionLoading ? (
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                      ) : (
-                        <>Enter Raffle <ChevronRight className="w-5 h-5" /></>
-                      )}
-                    </button>
-                  </div>
-
-                  {message && (
+            {/* Calculations Ritual (Animated State) */}
+            <AnimatePresence>
+                {contractData?.raffleState === 1 && (
                     <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`mt-10 p-4 rounded-2xl flex items-center gap-3 border ${
-                        message.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-300' :
-                        message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-300' :
-                        'bg-accent/10 border-accent/20 text-accent'
-                      }`}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="p-8 rounded-[2rem] bg-amber-500/5 border border-amber-500/10 flex flex-col items-center text-center space-y-4"
                     >
-                      <div className={`w-2 h-2 rounded-full ${message.type === 'error' ? 'bg-red-500' : message.type === 'success' ? 'bg-green-500' : 'bg-accent'}`} />
-                      <span className="text-sm font-medium">{message.text}</span>
+                        <div className="relative">
+                            <RefreshCcw className="w-12 h-12 text-amber-500 animate-spin" />
+                            <div className="absolute inset-0 blur-[20px] bg-amber-500/30 animate-pulse" />
+                        </div>
+                        <h3 className="text-xl font-bold uppercase tracking-tighter text-amber-500">Winner Pick in Progress</h3>
+                        <p className="text-white/40 text-sm max-w-sm">Chainlink is generating a verifiable random seed. The pool is temporarily locked.</p>
                     </motion.div>
-                  )}
-                </div>
+                )}
+            </AnimatePresence>
 
-                {/* Recent Winner Display */}
-                <div className="w-full glass-card p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 border-white/5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                      <Trophy className="w-6 h-6 text-white/20" />
+            {/* Winner Spotlight */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="p-8 rounded-[2rem] bg-white/5 border border-white/5 hover:border-white/10 transition-all group">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                            <Trophy className="w-6 h-6 text-purple-400" />
+                        </div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-white/30">Registry Outcome</div>
                     </div>
-                    <div>
-                      <p className="text-xs text-white/30 uppercase tracking-widest font-semibold">Last Winner</p>
-                      <p className="font-mono text-sm text-accent tracking-tighter truncate max-w-[200px] md:max-w-none">
-                        {contractData?.recentWinner || "Waiting for first win..."}
-                      </p>
+                    <div className="space-y-1">
+                        <div className="text-2xl font-bold truncate">
+                            {contractData?.recentWinner || "Genesis State"}
+                        </div>
+                        <div className="text-xs font-mono text-purple-400 uppercase">Recent Victor Address</div>
                     </div>
-                  </div>
-                  <div className="h-full w-px bg-white/10 hidden md:block" />
-                  <div className="text-right">
-                    <button className="text-xs font-semibold text-white/30 hover:text-white transition-colors flex items-center gap-1 group">
-                      View Contract History <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                    <button className="mt-8 text-[10px] font-bold text-white/20 hover:text-white transition-colors flex items-center gap-2">
+                        SCAN ON ETHERSCAN <ExternalLink className="w-3 h-3" />
                     </button>
-                  </div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </motion.main>
 
-      {/* Footer */}
-      <footer className="relative z-50 w-full max-w-7xl px-8 py-12 flex flex-col md:flex-row items-center justify-between border-t border-white/5">
-        <div className="text-xs text-white/20 font-light flex items-center gap-6">
-          <span>© 2026 REFLECT CORE</span>
-          <span className="w-1 h-1 rounded-full bg-white/10" />
-          <span>DECENTRALIZED AUTONOMY</span>
-        </div>
-        <div className="mt-6 md:mt-0 flex items-center gap-8 text-[10px] font-mono text-white/40 uppercase tracking-widest">
-          <a href="#" className="hover:text-accent transition-colors">Documentation</a>
-          <a href="#" className="hover:text-accent transition-colors">Privacy</a>
-          <a href="#" className="hover:text-accent transition-colors">GitHub</a>
-        </div>
+                <div className="p-8 rounded-[2rem] bg-blue-500/5 border border-blue-500/10 hover:border-blue-500/20 transition-all relative overflow-hidden">
+                    <div className="absolute top-[-50%] right-[-30%] w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full" />
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                        <div className="flex items-center justify-between">
+                             <div className="text-xs font-bold uppercase tracking-widest text-white/30">Protocol Info</div>
+                             <Activity className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-4">
+                                <span className="text-4xl font-black">{contractData?.interval || 30}s</span>
+                                <span className="text-xs text-white/40 uppercase font-bold leading-none">Rotation <br /> Cycle</span>
+                            </div>
+                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                <motion.div 
+                                    className="h-full bg-blue-500"
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${(timeLeft / (contractData?.interval || 30)) * 100}%` }}
+                                    transition={{ duration: 1 }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </motion.div>
+
+          {/* Sidebar Area (4 columns) */}
+          <motion.div variants={itemVariants} className="lg:col-span-4 space-y-8">
+            
+            {/* Stats Vertical Grid */}
+            <div className="space-y-6">
+                <StatCard 
+                    label="Net Pool Value" 
+                    value={`${contractData?.poolBalance || "0"} ETH`} 
+                    subValue={`Entry: ${contractData?.entranceFee || "0"} ETH`}
+                    icon={<Coins className="w-5 h-5" />} 
+                    color="text-white"
+                />
+                <StatCard 
+                    label="Pool Velocity" 
+                    value={String(contractData?.playersCount || 0)} 
+                    subValue="Active Participants"
+                    icon={<Users className="w-5 h-5" />} 
+                />
+                <StatCard 
+                    label="Time Until Pick" 
+                    value={formatTime(timeLeft)} 
+                    subValue="Next distribution"
+                    icon={<Clock className="w-5 h-5" />} 
+                />
+                <StatCard 
+                    label="Grid Status" 
+                    value={contractData?.raffleState === 0 ? "STABLE" : "SYNCING"} 
+                    subValue={contractData?.raffleState === 0 ? "Open for entries" : "Selecting winner"}
+                    icon={<Activity className="w-5 h-5" />} 
+                    color={contractData?.raffleState === 0 ? "text-green-400" : "text-amber-500"}
+                />
+            </div>
+
+            {/* Admin Portal (Conditional) */}
+            <AnimatePresence>
+                {showAdmin && isAdmin && (
+                    <motion.div 
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="p-8 rounded-[2.5rem] bg-purple-500/5 border border-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.1)] space-y-6"
+                    >
+                        <div className="flex items-center gap-3 mb-2">
+                            <Lock className="w-5 h-5 text-purple-400" />
+                            <h3 className="font-black text-xl tracking-tighter uppercase italic">Control Grid</h3>
+                        </div>
+
+                        <AdminAction 
+                            label="Register Protocol Entry" 
+                            action={enterRaffle} 
+                            loading={actionLoading} 
+                            icon={<PlusCircle className="w-4 h-4" />}
+                            description="Quick entry for testing/admin"
+                        />
+                        <AdminAction 
+                            label="Initiate Pick" 
+                            action={triggerWinner} 
+                            loading={actionLoading} 
+                            icon={<RefreshCcw className="w-4 h-4" />}
+                            description="Force trigger performUpkeep"
+                        />
+                        <AdminAction 
+                            label="Inject VRF Funder" 
+                            action={fundVRF} 
+                            loading={actionLoading} 
+                            icon={<PlusCircle className="w-4 h-4" />}
+                            description="Add native ETH to VRF"
+                        />
+                         <AdminAction 
+                            label="Emergency Sync" 
+                            action={emergencyReset} 
+                            loading={actionLoading} 
+                            icon={<Activity className="w-4 h-4" />}
+                            description="Force state to OPEN"
+                            danger
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+          </motion.div>
+        </motion.div>
+
+        {/* Participant Registry Section */}
+        <motion.div variants={itemVariants} className="mt-16 space-y-8">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                        <Users className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <h2 className="text-3xl font-black tracking-tighter uppercase italic">Participant Registry</h2>
+                </div>
+                <div className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em]">Transparent Pool Data</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence>
+                    {contractData?.players && contractData.players.length > 0 ? (
+                        contractData.players.map((player, idx) => (
+                            <motion.div 
+                                key={`${player}-${idx}`}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: idx * 0.05 }}
+                                className="p-5 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between group hover:border-purple-500/20 transition-all"
+                            >
+                                <div className="flex items-center gap-4 overflow-hidden">
+                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-bold text-white/20 group-hover:text-purple-400 group-hover:bg-purple-500/10 transition-all">
+                                        {idx + 1}
+                                    </div>
+                                    <div className="font-mono text-xs text-white/60 truncate group-hover:text-white transition-colors">
+                                        {player}
+                                    </div>
+                                </div>
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="col-span-full py-20 rounded-[2.5rem] bg-white/5 border border-dashed border-white/10 flex flex-col items-center justify-center text-center space-y-2 opacity-50">
+                            <Users className="w-8 h-8 text-white/20" />
+                            <p className="font-bold uppercase tracking-widest text-[10px]">No Active Participants Found</p>
+                        </div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </motion.div>
+
+        {/* Global Notifications */}
+        <AnimatePresence>
+            {message && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                    className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] w-full max-w-sm"
+                >
+                    <div className={`p-5 rounded-2xl backdrop-blur-3xl border shadow-2xl flex items-center justify-between gap-4 ${
+                        message.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-100' :
+                        message.type === 'success' ? 'bg-green-500/20 border-green-500/30 text-green-100' :
+                        'bg-purple-500/20 border-purple-500/30 text-purple-100'
+                    }`}>
+                        <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="flex-shrink-0">
+                                {message.type === 'error' ? <Lock className="w-5 h-5 text-red-400" /> : <Sparkles className="w-5 h-5 text-purple-400" />}
+                            </div>
+                            <span className="text-sm font-semibold truncate leading-tight">{message.text}</span>
+                        </div>
+                        <button onClick={() => setMessage(null)} className="opacity-40 hover:opacity-100 text-xs font-bold transition-opacity flex-shrink-0">DISMISS</button>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+      </main>
+
+      {/* Interactive Noise Texture */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] contrast-150 z-[5] mix-blend-overlay noise-bg" />
+      
+      <footer className="relative z-10 py-12 px-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between text-white/20 text-[10px] font-bold tracking-[0.2em] uppercase max-w-7xl mx-auto w-full">
+         <div className="flex items-center gap-4">
+             <span>REFLECT PROTOCOL CORE</span>
+             <span className="w-1 h-1 rounded-full bg-white/20" />
+             <span>VERIFIABLE AUTONOMY v2.5</span>
+         </div>
+         <div className="flex gap-8 mt-6 md:mt-0">
+             <a href="#" className="hover:text-purple-400 transition-colors">Nodes</a>
+             <a href="#" className="hover:text-purple-400 transition-colors">Security</a>
+             <a href="#" className="hover:text-purple-400 transition-colors">GitHub</a>
+         </div>
       </footer>
     </div>
   );
@@ -456,16 +691,39 @@ export default function Home() {
 
 // --- Subcomponents ---
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function StatCard({ label, value, subValue, icon, color = "text-purple-400" }: { label: string; value: string; subValue: string; icon: React.ReactNode; color?: string }) {
   return (
-    <div className="glass-card p-6 rounded-[1.5rem] space-y-3 hover:border-accent/40 transition-colors group">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">{label}</span>
-        <div className="p-2 rounded-xl bg-white/5 group-hover:bg-accent/10 transition-colors">
+    <div className="p-8 rounded-[2rem] bg-white/5 border border-white/5 hover:border-white/10 transition-all group relative overflow-hidden">
+      <div className="absolute top-0 right-0 p-6 opacity-[0.1] -rotate-12 group-hover:rotate-0 transition-transform duration-500">
           {icon}
+      </div>
+      <div className="relative z-10 space-y-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">{label}</div>
+        <div className="space-y-1">
+            <div className={`text-4xl font-black tracking-tighter ${color}`}>{value}</div>
+            <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{subValue}</div>
         </div>
       </div>
-      <p className="text-2xl font-bold text-white tracking-tight">{value}</p>
     </div>
+  );
+}
+
+function AdminAction({ label, action, loading, icon, description, danger = false }: { label: string; action: () => void; loading: boolean; icon: React.ReactNode; description: string; danger?: boolean }) {
+  return (
+    <button 
+        onClick={action}
+        disabled={loading}
+        className={`w-full p-5 rounded-2xl border transition-all text-left flex items-start gap-4 active:scale-[0.98] disabled:opacity-50 ${
+            danger ? 'bg-red-500/5 border-red-500/10 hover:bg-red-500/10' : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-purple-500/30'
+        }`}
+    >
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${danger ? 'bg-red-500/20 text-red-400' : 'bg-purple-500/20 text-purple-400'}`}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
+        </div>
+        <div className="space-y-1 overflow-hidden">
+            <div className={`text-sm font-black uppercase italic tracking-tighter ${danger ? 'text-red-400' : 'text-white'}`}>{label}</div>
+            <div className="text-[10px] font-medium text-white/30 uppercase tracking-widest truncate">{description}</div>
+        </div>
+    </button>
   );
 }

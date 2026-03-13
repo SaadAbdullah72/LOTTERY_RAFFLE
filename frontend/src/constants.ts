@@ -1,4 +1,4 @@
-export const contractAddress = "0x96Dc50A5F6ffE8504CE0F3b3B6C88a253c6E5228"; // User needs to update this after deploying
+export const contractAddress = "0x30a07FC174992EE70f745088cb9cbeD672aE619A"; // User needs to update this after deploying
 export const abi = [
     {
         "inputs": [
@@ -250,6 +250,13 @@ export const abi = [
         "name": "enterRaffle",
         "outputs": [],
         "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "forceResetRaffle",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function"
     },
     {

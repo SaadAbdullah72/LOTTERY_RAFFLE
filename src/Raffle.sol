@@ -182,6 +182,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
         }
     }
 
+    /**
+     * @notice Emergency function to reset raffle state if VRF callback never arrives
+     * @dev Only callable by the raffle owner when state is CALCULATING
+     */
+    function forceResetRaffle() external {
+        if (msg.sender != i_raffleOwnerAddress) {
+            revert Raffle__TransferFailed(); // reuse error for unauthorized
+        }
+        if (s_raffleState != RaffleState.CALCULATING) {
+            revert Raffle__RaffleNotOpen();
+        }
+        s_raffleState = RaffleState.OPEN;
+        s_lastTimeStamp = block.timestamp;
+    }
+
     //* Getter Functions */
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
